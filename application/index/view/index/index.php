@@ -445,6 +445,109 @@
             display: block;
         }
 
+        /* 移动端样式 */
+        @media (max-width: 768px) {
+            .recording-section {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 20px;
+                background: rgba(0, 0, 0, 0.9);
+                border-radius: 0;
+                z-index: 1000;
+                box-sizing: border-box;
+            }
+
+            .recording-section.visible {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .recording-info {
+                width: 100%;
+                display: flex;
+                flex-direction: column;
+                gap: 15px;
+                align-items: center;
+                margin-bottom: 0;
+            }
+
+            .selected-actions {
+                background: rgba(0, 0, 0, 0.7);
+                padding: 15px;
+                border-radius: 10px;
+                backdrop-filter: blur(5px);
+            }
+
+            .action-guide {
+                background: rgba(0, 0, 0, 0.7);
+                padding: 15px;
+                border-radius: 10px;
+                backdrop-filter: blur(5px);
+                max-width: 400px;
+                margin-top: 16px;
+            }
+
+            .close-recording {
+                position: absolute;
+                top: 20px;
+                right: 20px;
+                background: rgba(0, 0, 0, 0.7);
+                color: #fff;
+                border: none;
+                width: 40px;
+                height: 40px;
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                z-index: 2;
+                transition: all 0.3s;
+            }
+
+            .close-recording:hover {
+                background: rgba(255, 87, 34, 0.7);
+                transform: rotate(90deg);
+            }
+
+            .recording-preview {
+                margin: 0 auto;
+            }
+
+            .recording-controls {
+                margin-top: 20px;
+                z-index: 2;
+            }
+        }
+
+        /* 移动端小屏幕适配 */
+        @media (max-width: 480px) {
+            .recording-section {
+                padding: 10px;
+            }
+
+            .recording-info {
+                top: 10px;
+                left: 10px;
+                right: 10px;
+            }
+
+            .action-guide {
+                max-width: 100%;
+            }
+
+            .close-recording {
+                top: 10px;
+                right: 10px;
+            }
+        }
+
         .recording-preview {
             width: 100%;
             max-width: 640px;
@@ -671,9 +774,6 @@
                     <div id="actionErrorMsg" style="color: #f44336; margin-top: 10px; min-height: 22px;"></div>
                 </div>
             </div>
-
-            <!-- 录制区域 -->
-            <!-- 动作录制模块已移除，仅保留在 info-section 下方 -->
         </div>
 
         <div class="info-section">
@@ -694,9 +794,19 @@
 
             <!-- 录制区域 -->
             <div id="recordingSection" class="recording-section">
-                <h3>动作录制</h3>
-                <div class="selected-actions" id="selectedActionsContainer">
-                    <!-- 选中的动作将在这里显示 -->
+                <!-- 移动端关闭按钮 -->
+                <button class="close-recording" id="closeRecordingBtn" style="display: none;">
+                    <i class="fas fa-times"></i>
+                </button>
+                <div class="recording-info">
+                    <div class="selected-actions" id="selectedActionsContainer">
+                        <!-- 选中的动作将在这里显示 -->
+                    </div>
+                </div>
+                <div class="recording-preview">
+                    <video id="cameraPreview" autoplay playsinline muted></video>
+                    <div id="actionMask" class="action-mask"></div>
+                    <div id="recordingStatus" class="recording-status">准备就绪</div>
                 </div>
                 <div class="action-guide">
                     <h4>录制说明：</h4>
@@ -707,17 +817,15 @@
                         <li>动作要自然，幅度适中</li>
                     </ol>
                 </div>
-                <div class="recording-preview">
-                    <video id="cameraPreview" autoplay playsinline muted></video>
-                    <div id="actionMask" class="action-mask"></div>
-                    <div id="recordingStatus" class="recording-status">准备就绪</div>
-                </div>
                 <div class="recording-controls">
                     <button id="startRecordingBtn" class="bg-green-600 hover:bg-green-700">
                         <i class="fas fa-play mr-2"></i>开始录制
                     </button>
                     <button id="stopRecordingBtn" class="bg-red-600 hover:bg-red-700" style="display: none;">
                         <i class="fas fa-stop mr-2"></i>停止录制
+                    </button>
+                    <button id="cancelRecordingBtn" class="bg-gray-600 hover:bg-gray-700" style="display:none;">
+                        <i class="fas fa-times mr-2"></i>取消录制
                     </button>
                 </div>
             </div>
@@ -902,6 +1010,7 @@
         activeLivenessBtn.addEventListener('click', function() {
             livenessModal.style.display = 'flex';
             selectedActions.clear();
+            actionItems.forEach(item => item.classList.remove('active'));
             updateSelectedActionsDisplay();
             const actionErrorMsg = document.getElementById('actionErrorMsg');
             if (actionErrorMsg) actionErrorMsg.textContent = '';
@@ -947,6 +1056,18 @@
                         }
                     });
                     updateSelectedActionsDisplay();
+
+                    // 当所有动作被取消时，关闭录制界面
+                    if (selectedActions.size === 0) {
+                        if (stream) {
+                            stream.getTracks().forEach(track => track.stop());
+                            stream = null;
+                        }
+                        recordingSection.classList.remove('visible');
+                        recordingStatus.classList.remove('visible');
+                        recordingStatus.classList.remove('recording');
+                        updateStatus('已取消所有动作，请重新点击"动作活体检测"按钮选择动作');
+                    }
                 });
             });
         }
@@ -989,6 +1110,15 @@
                 livenessModal.style.display = 'none';
                 recordingSection.classList.add('visible');
                 recordingStatus.classList.add('visible');
+                
+                // 根据屏幕宽度显示/隐藏关闭按钮
+                const closeRecordingBtn = document.getElementById('closeRecordingBtn');
+                if (window.innerWidth <= 768) {
+                    closeRecordingBtn.style.display = 'flex';
+                } else {
+                    closeRecordingBtn.style.display = 'none';
+                }
+                
                 updateStatus('摄像头已就绪，请按照提示完成动作');
             } catch (error) {
                 let errorMessage = '无法访问摄像头: ';
@@ -1003,17 +1133,38 @@
             }
         });
 
-        // 关闭模态框时清理资源
-        closeModalBtn.addEventListener('click', function() {
+        // 监听窗口大小变化
+        window.addEventListener('resize', function() {
+            const closeRecordingBtn = document.getElementById('closeRecordingBtn');
+            const cancelRecordingBtn = document.getElementById('cancelRecordingBtn');
+            if (window.innerWidth <= 768) {
+                closeRecordingBtn.style.display = 'flex';
+                cancelRecordingBtn.style.display = 'inline-block';
+            } else {
+                closeRecordingBtn.style.display = 'none';
+                cancelRecordingBtn.style.display = 'none';
+            }
+        });
+
+        // 初始判断移动端显示取消按钮
+        window.addEventListener('DOMContentLoaded', function() {
+            const cancelRecordingBtn = document.getElementById('cancelRecordingBtn');
+            if (window.innerWidth <= 768) {
+                cancelRecordingBtn.style.display = 'inline-block';
+            } else {
+                cancelRecordingBtn.style.display = 'none';
+            }
+        });
+
+        // 取消录制按钮功能
+        document.getElementById('cancelRecordingBtn').addEventListener('click', function() {
             if (stream) {
                 stream.getTracks().forEach(track => track.stop());
             }
-            livenessModal.style.display = 'none';
             recordingSection.classList.remove('visible');
             recordingStatus.classList.remove('visible');
             recordingStatus.classList.remove('recording');
-            selectedActions.clear();
-            actionItems.forEach(item => item.classList.remove('active'));
+            updateStatus('已取消录制');
         });
 
         // 开始录制
@@ -1153,6 +1304,27 @@
         stopRecordingBtn.addEventListener('click', function() {
             hideActionTip();
             if (actionTimer) clearInterval(actionTimer);
+        });
+
+        document.getElementById('closeRecordingBtn').addEventListener('click', function() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+            recordingSection.classList.remove('visible');
+            recordingStatus.classList.remove('visible');
+            recordingStatus.classList.remove('recording');
+            updateStatus('已取消录制');
+        });
+
+        // 取消按钮事件，关闭弹窗并清空选中动作
+        closeModalBtn.addEventListener('click', function() {
+            livenessModal.style.display = 'none';
+            selectedActions.clear();
+            actionItems.forEach(item => item.classList.remove('active'));
+            updateSelectedActionsDisplay();
+            const actionErrorMsg = document.getElementById('actionErrorMsg');
+            if (actionErrorMsg) actionErrorMsg.textContent = '';
         });
     });
 </script>
