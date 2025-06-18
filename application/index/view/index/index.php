@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>M3U8视频播放器</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://unpkg.com/hls.js@1.4.10/dist/hls.min.js"></script>
+    {load href="/static/css/font-awesome.css" /}
+    {load href="/static/js/hls.min.js" /}
     <style>
         * {
             margin: 0;
