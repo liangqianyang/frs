@@ -569,7 +569,7 @@
                 <div class="input-group">
                     <label for="videoUrl"><i class="fas fa-link"></i> M3U8视频地址</label>
                     <input type="text" id="videoUrl" placeholder="输入M3U8视频流地址..."
-                           value="http://mjyy-media.zaixian100f.com/5014fe78ecbf71eeb1af4531948c0102/f2eda0a59ad043b28b7a7ba31fb05982-491166293ecc83199aaabfc13888d5a6-fd.m3u8?auth_key=1748498840-474274015b4c4bb09e560ae05841e00f-0-4f73dc0b3f48b4e940bd4d788ac74f4e">
+                           value="https://mjyy-media.zaixian100f.com/5014fe78ecbf71eeb1af4531948c0102/f2eda0a59ad043b28b7a7ba31fb05982-491166293ecc83199aaabfc13888d5a6-fd.m3u8?auth_key=1748498840-474274015b4c4bb09e560ae05841e00f-0-4f73dc0b3f48b4e940bd4d788ac74f4e">
                 </div>
 
                 <div class="btn-group">
