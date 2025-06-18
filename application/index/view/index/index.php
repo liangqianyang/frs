@@ -681,7 +681,7 @@
     </div>
 
     <footer>
-        <p>© 2023 活体检测系统 | 技术支持：ThinkPHP</p>
+        <p>© 2025 活体检测系统 | 技术支持：华为云</p>
     </footer>
 </div>
 
@@ -721,8 +721,9 @@
                 hls.attachMedia(video);
 
                 hls.on(Hls.Events.MANIFEST_PARSED, function() {
-                    updateStatus('视频加载完成，准备播放');
-                    video.play();
+                    updateStatus('视频加载完成，请点击播放按钮开始播放');
+                    // 移除自动播放
+                    // video.play();
                 });
 
                 hls.on(Hls.Events.ERROR, function(event, data) {
