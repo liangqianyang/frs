@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>活体检测系统</title>
+    <script src="https://cdn.tailwindcss.com/3.3.3"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e4edf5 100%);
+            color: #2d3748;
+        }
+        
+        .glassmorphism {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+        }
+        
+        .card-hover {
+            transition: all 0.3s ease;
+        }
+        
+        .card-hover:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 28px 0 rgba(31, 38, 135, 0.2);
+        }
+        
+        .blob {
+            position: absolute;
+            background: linear-gradient(135deg, #4299e1 0%, #9f7aea 100%);
+            filter: blur(60px);
+            opacity: 0.3;
+            border-radius: 50%;
+            animation: blob-movement 15s infinite linear;
+            z-index: -2;
+        }
+        
+        @keyframes blob-movement {
+            0% { transform: translate(0, 0) scale(1); }
+            33% { transform: translate(5%, -10%) scale(1.3); }
+            66% { transform: translate(-15%, 5%) scale(0.9); }
+            100% { transform: translate(0, 0) scale(1); }
+        }
+        
+        .highlight-text {
+            position: relative;
+            display: inline-block;
+        }
+        
+        .highlight-text::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 10px;
+            background-color: rgba(99, 102, 241, 0.2);
+            z-index: -1;
+        }
+        
+        .shadow-glow {
+            box-shadow: 0 10px 25px -5px rgba(99, 102, 241, 0.5);
+        }
+        
+        .bg-gradient-primary {
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+        }
+        
+        .action-pill {
+            display: inline-block;
+            padding: 2px 12px;
+            border-radius: 16px;
+            font-size: 14px;
+            font-weight: 500;
+            background: rgba(99, 102, 241, 0.1);
+            color: #4f46e5;
+            margin-right: 8px;
+            margin-bottom: 8px;
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <div class="blob w-96 h-96 top-0 left-0"></div>
+    <div class="blob w-80 h-80 bottom-0 right-0"></div>
+
+    <!-- 导航条 -->
+    <nav class="glassmorphism sticky top-0 z-50 p-4 mb-8">
+        <div class="container mx-auto flex items-center justify-between">
+            <div class="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 text-transparent bg-clip-text">
+                <i class="fas fa-user-shield mr-2"></i>活体检测系统
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主内容区 -->
+    <main class="container mx-auto py-8 px-4">
+        <div class="glassmorphism p-8 mb-8">
+            <h2 class="text-3xl font-bold mb-6 flex items-center">
+                <div class="w-10 h-10 rounded-full bg-gradient-primary flex items-center justify-center text-white mr-3">
+                    <i class="fas fa-camera"></i>
+                </div>
+                摄像头活体检测
+            </h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div>
+                    <p class="mb-4">本系统通过调用摄像头录制包含特定动作（点头、摇头、张嘴）的视频，并调用华为云活体检测接口进行验证。</p>
+                    
+                    <div class="my-6">
+                        <h4 class="font-semibold text-lg mb-3 text-gray-700">支持检测的动作：</h4>
+                        <div class="flex flex-wrap">
+                            <div class="action-pill"><i class="fas fa-arrow-left mr-1"></i> 左摇头</div>
+                            <div class="action-pill"><i class="fas fa-arrow-right mr-1"></i> 右摇头</div>
+                            <div class="action-pill"><i class="fas fa-arrow-up mr-1"></i> 点头</div>
+                            <div class="action-pill"><i class="fas fa-comment-dots mr-1"></i> 嘴部动作</div>
+                            <div class="action-pill"><i class="fas fa-eye mr-1"></i> 眨眼</div>
+                        </div>
+                    </div>
+                    
+                    <p class="text-sm text-gray-500">请确保浏览器已授予摄像头权限，并按照提示完成动作录制。</p>
+                </div>
+                
+                <div class="flex flex-col items-center">
+                    <video id="video" width="100%" height="auto" autoplay class="rounded-lg mb-4"></video>
+                    <div class="flex gap-4">
+                        <button id="startRecordingButton" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition-colors">
+                            <i class="fas fa-play mr-2"></i>开始录制
+                        </button>
+                        <button id="stopRecordingButton" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors" disabled>
+                            <i class="fas fa-stop mr-2"></i>停止录制
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="glassmorphism p-8">
+            <h2 class="text-3xl font-bold mb-6 flex items-center">
+                <div class="w-10 h-10 rounded-full bg-gradient-primary flex items-center justify-center text-white mr-3">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                </div>
+                华为云活体检测
+            </h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div>
+                    <h3 class="text-xl font-semibold mb-4">接口参数说明</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <p class="font-medium text-gray-700">视频要求：</p>
+                            <ul class="list-disc pl-5 text-gray-600 text-sm">
+                                <li>视频大小不超过8MB</li>
+                                <li>建议压缩到200KB-2MB</li>
+                                <li>视频时长1-15秒</li>
+                                <li>建议帧率10fps-30fps</li>
+                            </ul>
+                        </div>
+                        
+                        <div>
+                            <p class="font-medium text-gray-700">动作代码：</p>
+                            <ul class="list-disc pl-5 text-gray-600 text-sm">
+                                <li>1: 左摇头</li>
+                                <li>2: 右摇头</li>
+                                <li>3: 点头</li>
+                                <li>4: 嘴部动作</li>
+                                <li>5: 眨眼</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                
+                <div>
+                    <h3 class="text-xl font-semibold mb-4">检测结果</h3>
+                    <div id="resultDiv" class="bg-gray-50 p-4 rounded-lg min-h-32">
+                        <p class="text-gray-500">检测结果将显示在这里...</p>
+                    </div>
+                    
+                    <div class="mt-4">
+                        <button id="detectButton" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition-colors">
+                            <i class="fas fa-search mr-2"></i>调用检测接口
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            let mediaRecorder;
+            let recordedChunks = [];
+            let videoBlob;
+            
+            const video = document.getElementById('video');
+            const startRecordingButton = document.getElementById('startRecordingButton');
+            const stopRecordingButton = document.getElementById('stopRecordingButton');
+            const detectButton = document.getElementById('detectButton');
+            const resultDiv = document.getElementById('resultDiv');
+            
+            // 检查浏览器是否支持getUserMedia API
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                // 调用getUserMedia API，请求摄像头权限
+                navigator.mediaDevices.getUserMedia({ video: true })
+                   .then(function(stream) {
+                        // 将获取到的视频流设置为<video>元素的源
+                        video.srcObject = stream;
+
+                        // 开始录制按钮事件
+                        startRecordingButton.addEventListener('click', function() {
+                            recordedChunks = [];
+                            mediaRecorder = new MediaRecorder(stream);
+                            
+                            mediaRecorder.ondataavailable = function(event) {
+                                if (event.data.size > 0) {
+                                    recordedChunks.push(event.data);
+                                }
+                            };
+                            
+                            mediaRecorder.onstop = function() {
+                                videoBlob = new Blob(recordedChunks, { type: 'video/webm' });
+                                const url = URL.createObjectURL(videoBlob);
+                                
+                                // 创建下载链接
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = 'recorded_video.webm';
+                                a.style.display = 'none';
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                URL.revokeObjectURL(url);
+                                
+                                resultDiv.innerHTML = '<p class="text-green-600">视频录制完成，准备调用检测接口...</p>';
+                                detectButton.disabled = false;
+                            };
+                            
+                            mediaRecorder.start(100); // 每100ms收集一次数据
+                            startRecordingButton.disabled = true;
+                            stopRecordingButton.disabled = false;
+                            resultDiv.innerHTML = '<p class="text-blue-600">正在录制视频，请完成要求的动作...</p>';
+                        });
+
+                        // 停止录制按钮事件
+                        stopRecordingButton.addEventListener('click', function() {
+                            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                                mediaRecorder.stop();
+                                startRecordingButton.disabled = false;
+                                stopRecordingButton.disabled = true;
+                            }
+                        });
+                    })
+                   .catch(function(error) {
+                        resultDiv.innerHTML = `<p class="text-red-600">摄像头访问出错: ${error.message}</p>`;
+                        console.error("摄像头访问出错:", error);
+                    });
+            } else {
+                resultDiv.innerHTML = '<p class="text-red-600">您的浏览器不支持getUserMedia API</p>';
+                console.error("您的浏览器不支持getUserMedia API");
+            }
+            
+            // 调用检测接口按钮事件
+            detectButton.addEventListener('click', async function() {
+                if (!videoBlob) {
+                    resultDiv.innerHTML = '<p class="text-red-600">请先录制视频</p>';
+                    return;
+                }
+                
+                try {
+                    resultDiv.innerHTML = '<p class="text-blue-600">正在调用华为云活体检测接口...</p>';
+                    
+                    // 读取视频文件并进行Base64编码
+                    const reader = new FileReader();
+                    reader.readAsDataURL(videoBlob);
+                    
+                    reader.onloadend = async function() {
+                        const videoBase64 = reader.result.split(',')[1];
+                        
+                        // 这里应该替换为实际的华为云API调用代码
+                        // 以下是模拟的API调用过程
+                        setTimeout(() => {
+                            // 模拟API响应
+                            const mockResponse = {
+                                'video-result': {
+                                    'alive': true,
+                                    'actions': [
+                                        {'action': 3, 'result': true}, // 点头
+                                        {'action': 4, 'result': true}  // 嘴部动作
+                                    ]
+                                },
+                                'warning-list': []
+                            };
+                            
+                            let resultHTML = '<div class="space-y-2">';
+                            resultHTML += '<p class="font-medium">检测结果：</p>';
+                            resultHTML += `<p>活体检测: <span class="font-bold ${mockResponse['video-result'].alive ? 'text-green-600' : 'text-red-600'}">${mockResponse['video-result'].alive ? '通过' : '未通过'}</span></p>`;
+                            
+                            mockResponse['video-result'].actions.forEach(action => {
+                                const actionName = 
+                                    action.action === 1 ? '左摇头' :
+                                    action.action === 2 ? '右摇头' :
+                                    action.action === 3 ? '点头' :
+                                    action.action === 4 ? '嘴部动作' : '眨眼';
+                                    
+                                resultHTML += `<p>${actionName}: <span class="font-bold ${action.result ? 'text-green-600' : 'text-red-600'}">${action.result ? '成功' : '失败'}</span></p>`;
+                            });
+                            
+                            resultHTML += '</div>';
+                            resultDiv.innerHTML = resultHTML;
+                        }, 2000);
+                    };
+                    
+                } catch (error) {
+                    resultDiv.innerHTML = `<p class="text-red-600">调用华为云平台动作活体检测接口出错: ${error.message}</p>`;
+                    console.error('调用华为云平台动作活体检测接口出错:', error);
+                }
+            });
+        });
+    </script>
+</body>
+</html>
