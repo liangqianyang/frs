@@ -359,21 +359,65 @@
             flex-direction: column;
             align-items: center;
             gap: 8px;
+            position: relative;
+            overflow: hidden;
         }
 
         .action-item i {
             font-size: 24px;
             color: #ff9800;
+            transition: all 0.3s;
         }
 
         .action-item:hover {
             background: rgba(255, 152, 0, 0.2);
             transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(255, 152, 0, 0.2);
         }
 
         .action-item.active {
             background: rgba(255, 152, 0, 0.3);
             border-color: #ff5722;
+            box-shadow: 0 0 15px rgba(255, 87, 34, 0.3);
+        }
+
+        .action-item.active i {
+            color: #ff5722;
+            transform: scale(1.1);
+        }
+
+        .action-item.active::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            border: 2px solid #ff5722;
+            border-radius: 8px;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(255, 87, 34, 0.4);
+            }
+            70% {
+                box-shadow: 0 0 0 10px rgba(255, 87, 34, 0);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(255, 87, 34, 0);
+            }
+        }
+
+        .action-item span {
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+
+        .action-item.active span {
+            color: #ff5722;
+            font-weight: 600;
         }
 
         .modal-buttons {
