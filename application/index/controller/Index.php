@@ -14,6 +14,7 @@ use HuaweiCloud\SDK\Frs\V2\Model\LiveDetectBase64Req;
 use HuaweiCloud\SDK\Frs\V2\Model\LiveDetectFaceBase64Req;
 use think\Controller;
 use think\facade\Env;
+use think\facade\Log;
 use think\response\Json;
 
 class Index extends Controller
@@ -82,15 +83,19 @@ class Index extends Controller
         try {
             $response = $client->DetectLiveByBase64($request);
             if ($response) {
+                $body = $response->getBody();
+                Log::info('动作活体检结果：' . $body);
                 $result['alive'] = $response['videoResult']['alive'];
                 $result['picture'] = $response['videoResult']['picture'];
                 $result = $this->getArr($response, $result);
             }
         } catch (ConnectionException|RequestTimeoutException $e) {
             $result['error'] = $e->getMessage();
+            Log::error('动作活体检测异常：' . $e->getMessage());
         } catch (ServiceResponseException $e) {
             $error = '状态码：' . $e->getHttpStatusCode() . '，错误码：' . $e->getErrorCode() . '，错误信息：' . $e->getErrorMsg();
             $result['error'] = $error;
+            Log::error('动作活体检测异常：' . $error);
         }
         return json($result);
     }
