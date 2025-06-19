@@ -1235,18 +1235,6 @@
                     let finalBlob = blob;
                     let base64 = await blobToBase64(finalBlob);
                     let base64Size = Math.ceil((base64.length - 'data:video/webm;base64,'.length) * 3 / 4);
-                    if (base64Size > 2 * 1024 * 1024) {
-                        // 尝试压缩
-                        try {
-                            finalBlob = await compressVideo(blob);
-                            base64 = await blobToBase64(finalBlob);
-                            base64Size = Math.ceil((base64.length - 'data:video/webm;base64,'.length) * 3 / 4);
-                        } catch (e) {
-                            updateStatus('压缩视频失败: ' + e.message, true);
-                            recordingStatus.textContent = '压缩失败';
-                            return;
-                        }
-                    }
                     if (base64Size > 8 * 1024 * 1024) {
                         updateStatus('录制失败：视频文件过大（超过8MB），请缩短录制时长或降低分辨率', true);
                         recordingStatus.textContent = '视频过大';
@@ -1298,6 +1286,8 @@
                         if (result.alive === true) {
                             updateStatus('动作活体检测成功');
                             recordingStatus.textContent = '验证成功';
+                            const mobileErrorTip = document.getElementById('mobileErrorTip');
+                            if (mobileErrorTip) mobileErrorTip.style.display = 'none';
                             if (result.picture) {
                                 resultImage.src = result.picture.startsWith('data:') ? result.picture : 'data:image/jpeg;base64,' + result.picture;
                                 resultImageWrapper.style.display = 'block';
@@ -1309,6 +1299,29 @@
                             if (result.error) errorMsg += ': ' + result.error;
                             updateStatus(errorMsg, true);
                             recordingStatus.textContent = '验证失败';
+                            // H5界面额外弹出失败原因
+                            if (window.innerWidth <= 768 && result.error) {
+                                let mobileErrorTip = document.getElementById('mobileErrorTip');
+                                if (!mobileErrorTip) {
+                                    mobileErrorTip = document.createElement('div');
+                                    mobileErrorTip.id = 'mobileErrorTip';
+                                    mobileErrorTip.style.color = '#ff4d4f';
+                                    mobileErrorTip.style.background = 'rgba(255,255,255,0.95)';
+                                    mobileErrorTip.style.borderRadius = '8px';
+                                    mobileErrorTip.style.padding = '12px 16px';
+                                    mobileErrorTip.style.margin = '16px auto 0';
+                                    mobileErrorTip.style.fontWeight = 'bold';
+                                    mobileErrorTip.style.fontSize = '1.1rem';
+                                    mobileErrorTip.style.maxWidth = '90%';
+                                    mobileErrorTip.style.textAlign = 'center';
+                                    recordingSection.appendChild(mobileErrorTip);
+                                }
+                                mobileErrorTip.textContent = '失败原因：' + result.error;
+                                mobileErrorTip.style.display = 'block';
+                            } else {
+                                const mobileErrorTip = document.getElementById('mobileErrorTip');
+                                if (mobileErrorTip) mobileErrorTip.style.display = 'none';
+                            }
                             if (result.picture) {
                                 resultImage.src = result.picture.startsWith('data:') ? result.picture : 'data:image/jpeg;base64,' + result.picture;
                                 resultImageWrapper.style.display = 'block';
@@ -1343,37 +1356,6 @@
                 stopRecordingBtn.style.display = 'none';
             }
         });
-
-        // 视频压缩函数
-        async function compressVideo(blob) {
-            return new Promise((resolve, reject) => {
-                const video = document.createElement('video');
-                video.src = URL.createObjectURL(blob);
-
-                video.onloadedmetadata = () => {
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
-
-                    // 设置压缩参数
-                    const targetSize = 1024 * 1024; // 目标大小 1MB
-                    const quality = 0.7; // 压缩质量
-
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
-
-                    video.oncanplay = () => {
-                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                        canvas.toBlob((blob) => {
-                            resolve(blob);
-                        }, 'video/webm', quality);
-                    };
-
-                    video.play();
-                };
-
-                video.onerror = reject;
-            });
-        }
 
         // Blob转Base64
         function blobToBase64(blob) {
@@ -1428,6 +1410,173 @@
             updateSelectedActionsDisplay();
             const actionErrorMsg = document.getElementById('actionErrorMsg');
             if (actionErrorMsg) actionErrorMsg.textContent = '';
+        });
+
+        // 静默活体检测
+        silentLivenessBtn.addEventListener('click', async function() {
+            // 如果modal不存在，先插入
+            let modal = document.getElementById('silentLivenessModal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'silentLivenessModal';
+                modal.style.display = 'none';
+                modal.style.position = 'fixed';
+                modal.style.top = '0';
+                modal.style.left = '0';
+                modal.style.width = '100vw';
+                modal.style.height = '100vh';
+                modal.style.background = 'rgba(0,0,0,0.85)';
+                modal.style.zIndex = '2000';
+                modal.style.justifyContent = 'center';
+                modal.style.alignItems = 'center';
+                modal.innerHTML = `
+                  <div style="background:#222;padding:24px 16px;border-radius:12px;max-width:95vw;width:360px;text-align:center;position:relative;pointer-events:auto;">
+                    <div style="color:#ff9800;font-size:1rem;margin-bottom:8px;">请将人脸对准摄像头并居中</div>
+                    <div id="silentLivenessVideoWrap">
+                      <video id="silentLivenessVideo" autoplay playsinline style="width:100%;border-radius:8px;"></video>
+                    </div>
+                    <canvas id="silentLivenessCanvas" style="display:none;width:100%;border-radius:8px;"></canvas>
+                    <div id="silentLivenessBtns" style="margin-top:18px;display:flex;justify-content:center;gap:10px;flex-wrap:wrap;">
+                      <button id="takeSilentPhotoBtn" style="padding:10px 24px;font-size:1rem;border-radius:6px;background:#ff9800;color:#fff;border:none;">拍照</button>
+                      <button id="retakeSilentPhotoBtn" style="display:none;padding:10px 24px;font-size:1rem;border-radius:6px;background:#888;color:#fff;border:none;">重拍</button>
+                      <button id="confirmSilentPhotoBtn" style="display:none;padding:10px 24px;font-size:1rem;border-radius:6px;background:#4caf50;color:#fff;border:none;">确认上传</button>
+                      <button id="cancelSilentPhotoBtn" style="padding:10px 24px;font-size:1rem;border-radius:6px;background:#f44336;color:#fff;border:none;">取消</button>
+                    </div>
+                    <div id="silentLivenessError" style="color:#ff4d4f;margin-top:12px;min-height:22px;"></div>
+                  </div>
+                `;
+                document.body.appendChild(modal);
+            }
+            // 重新获取元素
+            const video = document.getElementById('silentLivenessVideo');
+            const canvas = document.getElementById('silentLivenessCanvas');
+            const errorDiv = document.getElementById('silentLivenessError');
+            const cancelBtn = document.getElementById('cancelSilentPhotoBtn');
+            let takeBtn = document.getElementById('takeSilentPhotoBtn');
+            let retakeBtn = document.getElementById('retakeSilentPhotoBtn');
+            let confirmBtn = document.getElementById('confirmSilentPhotoBtn');
+            // 检查元素是否都存在
+            if (!takeBtn || !retakeBtn || !confirmBtn || !video || !canvas || !errorDiv || !cancelBtn) {
+                alert('静默活体检测界面加载失败，请刷新页面重试');
+                return;
+            }
+            let stream = null;
+            let photoBase64 = '';
+            // 解绑旧事件，防止多次绑定
+            takeBtn.onclick = null;
+            retakeBtn.onclick = null;
+            confirmBtn.onclick = null;
+            cancelBtn.onclick = null;
+            modal.onmousedown = null;
+            // 打开模态
+            modal.style.display = 'flex';
+            errorDiv.textContent = '';
+            canvas.style.display = 'none';
+            video.style.display = 'block';
+            takeBtn.style.display = 'inline-block';
+            retakeBtn.style.display = 'none';
+            confirmBtn.style.display = 'none';
+            // 打开摄像头
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
+                    audio: false
+                });
+                video.srcObject = stream;
+                await video.play();
+            } catch (err) {
+                errorDiv.textContent = '无法访问摄像头：' + (err.message || '');
+                return;
+            }
+            // 拍照
+            takeBtn.onclick = async function() {
+                // 限制canvas最大分辨率
+                let vw = video.videoWidth || 640;
+                let vh = video.videoHeight || 480;
+                if (vw > 1280) { vh = Math.round(vh * 1280 / vw); vw = 1280; }
+                if (vh > 960) { vw = Math.round(vw * 960 / vh); vh = 960; }
+                canvas.width = vw;
+                canvas.height = vh;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0, vw, vh);
+                // 自动压缩图片到1MB以内
+                let quality = 0.92;
+                let dataUrl = canvas.toDataURL('image/jpeg', quality);
+                let base64 = dataUrl.split(',')[1].replace(/[^A-Za-z0-9+/=]/g, '');
+                let size = Math.ceil((base64.length) * 3 / 4);
+                while (size > 1024 * 1024 && quality > 0.5) {
+                    quality -= 0.15;
+                    dataUrl = canvas.toDataURL('image/jpeg', quality);
+                    base64 = dataUrl.split(',')[1].replace(/[^A-Za-z0-9+/=]/g, '');
+                    size = Math.ceil((base64.length) * 3 / 4);
+                }
+                if (size > 2 * 1024 * 1024) {
+                    errorDiv.textContent = '图片过大，请靠近摄像头并重拍';
+                    return;
+                }
+                photoBase64 = base64;
+                canvas.style.display = 'block';
+                video.style.display = 'none';
+                takeBtn.style.display = 'none';
+                retakeBtn.style.display = 'inline-block';
+                confirmBtn.style.display = 'inline-block';
+                errorDiv.textContent = '';
+            };
+            // 重拍
+            retakeBtn.onclick = function() {
+                canvas.style.display = 'none';
+                video.style.display = 'block';
+                takeBtn.style.display = 'inline-block';
+                retakeBtn.style.display = 'none';
+                confirmBtn.style.display = 'none';
+                errorDiv.textContent = '';
+            };
+            // 确认上传
+            confirmBtn.onclick = async function() {
+                errorDiv.textContent = '';
+                updateStatus('正在进行静默活体检测...');
+                try {
+                    const response = await fetch('/silentLiveness', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ image: photoBase64 })
+                    });
+                    const result = await response.json();
+                    const isMobile = window.innerWidth <= 768;
+                    if (result.alive === true) {
+                        updateStatus('静默活体检测成功');
+                        if (isMobile) {
+                            errorDiv.textContent = '检测成功';
+                            setTimeout(() => { modal.style.display = 'none'; if (stream) stream.getTracks().forEach(track => track.stop()); }, 1500);
+                        } else {
+                            modal.style.display = 'none';
+                            if (stream) stream.getTracks().forEach(track => track.stop());
+                        }
+                    } else {
+                        let errorMsg = '静默活体检测失败';
+                        if (result.error) errorMsg += ': ' + result.error;
+                        errorDiv.textContent = errorMsg;
+                        updateStatus(errorMsg, true);
+                        if (isMobile) {
+                            setTimeout(() => { modal.style.display = 'none'; if (stream) stream.getTracks().forEach(track => track.stop()); }, 1500);
+                        }
+                    }
+                } catch (e) {
+                    errorDiv.textContent = '静默活体检测接口请求失败: ' + e.message;
+                    updateStatus('静默活体检测接口请求失败: ' + e.message, true);
+                    if (window.innerWidth <= 768) {
+                        setTimeout(() => { modal.style.display = 'none'; if (stream) stream.getTracks().forEach(track => track.stop()); }, 1500);
+                    }
+                }
+            };
+            // 取消按钮事件
+            cancelBtn.onclick = function(e) {
+                e.stopPropagation();
+                modal.style.display = 'none';
+                if (stream) {
+                    stream.getTracks().forEach(track => track.stop());
+                }
+            };
         });
     });
 </script>
