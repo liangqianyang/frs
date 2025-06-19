@@ -6,6 +6,8 @@
     <title>活体检测</title>
     {load href="/static/css/font-awesome.css" /}
     {load href="/static/js/hls.min.js" /}
+    <!-- 添加 face-api.js -->
+    <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/dist/face-api.js"></script>
     <style>
         * {
             margin: 0;
@@ -1195,7 +1197,7 @@
 
         // 开始录制
         let recordStartTime = null;
-        startRecordingBtn.addEventListener('click', function() {
+        startRecordingBtn.addEventListener('click', async function() {
             // 清除抓拍图片和结果提示
             let resultImageWrapper = document.getElementById('resultImageWrapper');
             if (resultImageWrapper) {
@@ -1207,6 +1209,20 @@
                 if (resultTip) resultTip.style.display = 'none';
                 resultImageWrapper.style.display = 'none';
             }
+
+            // 确保模型已加载
+            try {
+                await Promise.all([
+                    faceapi.nets.tinyFaceDetector.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model'),
+                    faceapi.nets.faceLandmark68TinyNet.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model'),
+                    faceapi.nets.faceExpressionNet.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model')
+                ]);
+            } catch (err) {
+                console.error('无法加载面部识别模型:', err);
+                updateStatus('无法加载面部识别模型，请检查网络连接', true);
+                return;
+            }
+
             // 先重置
             recordStartTime = null;
 
@@ -1229,187 +1245,60 @@
                 };
 
                 mediaRecorder.onstop = async () => {
-                    recordingStatus.textContent = '处理中...';
+                    // 如果是因为完成所有动作而停止的，则自动调用接口
+                    if (currentActionIndex >= actionOrder.length) {
+                        const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                        
+                        // 将视频转换为base64，保留前缀
+                        const reader = new FileReader();
+                        reader.readAsDataURL(blob);
+                        reader.onloadend = async function() {
+                            const base64data = reader.result; // 保留前缀
+                            
+                            try {
+                                updateStatus('正在上传视频并进行活体检测...');
+                                const response = await fetch('/activeLiveness', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json'
+                                    },
+                                    body: JSON.stringify({
+                                        video: base64data,
+                                        actions: Array.from(selectedActions)
+                                    })
+                                });
+                                
+                                const result = await response.json();
+                                if (result.success) {
+                                    updateStatus('动作活体检测成功');
+                                    // 隐藏录制区域
+                                    recordingSection.classList.remove('visible');
+                                    recordingStatus.classList.remove('visible');
+                                    recordingStatus.classList.remove('recording');
+                                    // 停止摄像头
+                                    if (stream) {
+                                        stream.getTracks().forEach(track => track.stop());
+                                        stream = null;
+                                    }
+                                    // 渲染活体检测返回图片
+                                    renderLivenessPicture(result, '');
+                                } else {
+                                    updateStatus('动作活体检测失败: ' + (result.error || '未知错误'), true);
+                                    // 渲染活体检测返回图片，H5下展示错误
+                                    let errMsg = (result.error || '未知错误');
+                                    renderLivenessPicture(result, errMsg);
+                                }
+                            } catch (error) {
+                                updateStatus('活体检测接口请求失败: ' + error.message, true);
+                            }
+                        };
+                    }
+                    
+                    // 重置录制相关状态
+                    recordedChunks = [];
+                    startRecordingBtn.style.display = 'inline-block';
+                    stopRecordingBtn.style.display = 'none';
                     recordingStatus.classList.remove('recording');
-                    const blob = new Blob(recordedChunks, { type: 'video/webm' });
-
-                    // 计算实际录制时长（秒），每次都用最新的 recordStartTime
-                    let actualDuration = 0;
-                    if (recordStartTime) {
-                        actualDuration = (Date.now() - recordStartTime) / 1000;
-                    }
-                    recordStartTime = null;
-
-                    // 检查视频时长（取实际录制时长和视频元数据的最大值，防止浏览器兼容性问题）
-                    const videoForCheck = document.createElement('video');
-                    videoForCheck.preload = 'metadata';
-                    videoForCheck.src = URL.createObjectURL(blob);
-                    await new Promise((resolve, reject) => {
-                        videoForCheck.onloadedmetadata = () => resolve();
-                        videoForCheck.onerror = reject;
-                    });
-                    let metaDuration = videoForCheck.duration;
-                    URL.revokeObjectURL(videoForCheck.src);
-                    // 修正：只用有效的 metaDuration，否则用 actualDuration
-                    if (!metaDuration || !isFinite(metaDuration) || isNaN(metaDuration)) {
-                        metaDuration = 0;
-                    }
-                    const duration = Math.max(metaDuration, actualDuration);
-                    if (duration < 1) {
-                        updateStatus('录制失败：视频时长不能小于1秒', true);
-                        recordingStatus.textContent = '视频过短';
-                        return;
-                    }
-                    if (duration > 15) {
-                        updateStatus('录制失败：视频时长不能超过15秒', true);
-                        recordingStatus.textContent = '视频过长';
-                        return;
-                    }
-
-                    // 压缩视频，目标2MB以内，最大8MB
-                    let finalBlob = blob;
-                    let base64 = await blobToBase64(finalBlob);
-                    let base64Size = Math.ceil((base64.length - 'data:video/webm;base64,'.length) * 3 / 4);
-                    if (base64Size > 8 * 1024 * 1024) {
-                        updateStatus('录制失败：视频文件过大（超过8MB），请缩短录制时长或降低分辨率', true);
-                        recordingStatus.textContent = '视频过大';
-                        // H5界面额外弹出失败原因
-                        if (window.innerWidth <= 768) {
-                            let mobileErrorTip = document.getElementById('mobileErrorTip');
-                            if (!mobileErrorTip) {
-                                mobileErrorTip = document.createElement('div');
-                                mobileErrorTip.id = 'mobileErrorTip';
-                                mobileErrorTip.style.color = '#ff4d4f';
-                                mobileErrorTip.style.background = 'rgba(255,255,255,0.95)';
-                                mobileErrorTip.style.borderRadius = '8px';
-                                mobileErrorTip.style.padding = '12px 16px';
-                                mobileErrorTip.style.margin = '16px auto 0';
-                                mobileErrorTip.style.fontWeight = 'bold';
-                                mobileErrorTip.style.fontSize = '1.1rem';
-                                mobileErrorTip.style.maxWidth = '90%';
-                                mobileErrorTip.style.textAlign = 'center';
-                                recordingSection.appendChild(mobileErrorTip);
-                            }
-                            mobileErrorTip.textContent = '视频文件过大，请缩短录制时长或降低分辨率后重试';
-                            mobileErrorTip.style.display = 'block';
-                        }
-                        return;
-                    }
-
-                    try {
-                        updateStatus('正在验证...');
-                        const response = await fetch('/activeLiveness', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({
-                                video: base64,
-                                actions: Array.from(selectedActions)
-                            })
-                        });
-
-                        const result = await response.json();
-                        // 新增：检测结果图片渲染区域和说明
-                        let resultImageWrapper = document.getElementById('resultImageWrapper');
-                        if (!resultImageWrapper) {
-                            resultImageWrapper = document.createElement('div');
-                            resultImageWrapper.id = 'resultImageWrapper';
-                            resultImageWrapper.style.textAlign = 'center';
-                            resultImageWrapper.style.marginTop = '16px';
-                            // 文字说明
-                            const desc = document.createElement('div');
-                            desc.id = 'resultImageDesc';
-                            desc.textContent = '下图为检测时抓拍的视频图片';
-                            desc.style.color = '#ff9800';
-                            desc.style.fontSize = '15px';
-                            desc.style.marginBottom = '8px';
-                            resultImageWrapper.appendChild(desc);
-                            // 图片
-                            const img = document.createElement('img');
-                            img.id = 'resultImage';
-                            img.style.display = 'block';
-                            img.style.maxWidth = '320px';
-                            img.style.margin = '0 auto';
-                            img.style.borderRadius = '10px';
-                            img.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
-                            resultImageWrapper.appendChild(img);
-                            recordingSection.appendChild(resultImageWrapper);
-                        }
-                        let resultImage = document.getElementById('resultImage');
-                        let resultImageDesc = document.getElementById('resultImageDesc');
-                        if (result.alive === true) {
-                            updateStatus('动作活体检测成功');
-                            recordingStatus.textContent = '验证成功';
-                            const mobileErrorTip = document.getElementById('mobileErrorTip');
-                            if (mobileErrorTip) mobileErrorTip.style.display = 'none';
-                            if (result.picture) {
-                                resultImage.src = result.picture.startsWith('data:') ? result.picture : 'data:image/jpeg;base64,' + result.picture;
-                                resultImageWrapper.style.display = 'block';
-                            } else {
-                                resultImageWrapper.style.display = 'none';
-                            }
-                            // 在渲染抓拍图片前，H5界面插入结果提示
-                            if (window.innerWidth <= 768) {
-                                let resultTip = document.getElementById('mobileLivenessResultTip');
-                                if (!resultTip) {
-                                    resultTip = document.createElement('div');
-                                    resultTip.id = 'mobileLivenessResultTip';
-                                    resultTip.style.fontWeight = 'bold';
-                                    resultTip.style.fontSize = '1.1rem';
-                                    resultTip.style.margin = '0 auto 8px';
-                                    resultTip.style.maxWidth = '90%';
-                                    resultTip.style.textAlign = 'center';
-                                    resultImageWrapper.insertBefore(resultTip, resultImageWrapper.firstChild);
-                                }
-                                resultTip.textContent = '动作活体检测成功';
-                                resultTip.style.color = '#4caf50';
-                                resultTip.style.background = 'rgba(76,175,80,0.08)';
-                                resultTip.style.display = 'block';
-                            } else {
-                                // PC端隐藏该tip
-                                let resultTip = document.getElementById('mobileLivenessResultTip');
-                                if (resultTip) resultTip.style.display = 'none';
-                            }
-                        } else {
-                            let errorMsg = '动作活体检测失败';
-                            if (result.error) errorMsg += ': ' + result.error;
-                            updateStatus(errorMsg, true);
-                            recordingStatus.textContent = '验证失败';
-                            // H5界面额外弹出失败原因
-                            if (window.innerWidth <= 768 && result.error) {
-                                let mobileErrorTip = document.getElementById('mobileErrorTip');
-                                if (!mobileErrorTip) {
-                                    mobileErrorTip = document.createElement('div');
-                                    mobileErrorTip.id = 'mobileErrorTip';
-                                    mobileErrorTip.style.color = '#ff4d4f';
-                                    mobileErrorTip.style.background = 'rgba(255,255,255,0.95)';
-                                    mobileErrorTip.style.borderRadius = '8px';
-                                    mobileErrorTip.style.padding = '12px 16px';
-                                    mobileErrorTip.style.margin = '16px auto 0';
-                                    mobileErrorTip.style.fontWeight = 'bold';
-                                    mobileErrorTip.style.fontSize = '1.1rem';
-                                    mobileErrorTip.style.maxWidth = '90%';
-                                    mobileErrorTip.style.textAlign = 'center';
-                                    recordingSection.appendChild(mobileErrorTip);
-                                }
-                                mobileErrorTip.textContent = '失败原因：' + result.error;
-                                mobileErrorTip.style.display = 'block';
-                            } else {
-                                const mobileErrorTip = document.getElementById('mobileErrorTip');
-                                if (mobileErrorTip) mobileErrorTip.style.display = 'none';
-                            }
-                            if (result.picture) {
-                                resultImage.src = result.picture.startsWith('data:') ? result.picture : 'data:image/jpeg;base64,' + result.picture;
-                                resultImageWrapper.style.display = 'block';
-                            } else {
-                                resultImageWrapper.style.display = 'none';
-                            }
-                        }
-                    } catch (error) {
-                        updateStatus('验证请求失败: ' + error.message, true);
-                        recordingStatus.textContent = '验证失败';
-                    }
                 };
 
                 mediaRecorder.start();
@@ -1420,52 +1309,177 @@
                 recordingStatus.textContent = '录制中...';
                 recordingStatus.classList.add('recording');
                 updateStatus('正在录制...');
+
+                // 初始化动作检测
+                actionOrder = Array.from(selectedActions);
+                currentActionIndex = 0;
+                if (actionOrder.length > 0) {
+                    showActionTip(actionOrder[currentActionIndex]);
+                    initActionDetection();
+                }
             } catch (error) {
                 updateStatus('录制失败: ' + error.message, true);
             }
         });
 
-        // 停止录制
+        // --- 优化动作判定相关函数 ---
+        let actionDetectionInterval = null; // 全局声明，防止未定义报错
+        let nodTotalY = 0; // 点头累计y位移
+
+        // 计算眼睛纵横比（EAR）
+        function getEAR(eye) {
+            const A = Math.hypot(eye[1].x - eye[5].x, eye[1].y - eye[5].y);
+            const B = Math.hypot(eye[2].x - eye[4].x, eye[2].y - eye[4].y);
+            const C = Math.hypot(eye[0].x - eye[3].x, eye[0].y - eye[3].y);
+            return (A + B) / (2.0 * C);
+        }
+        // 张嘴程度
+        function getMouthOpen(mouth) {
+            // 14:上唇中点, 18:下唇中点
+            return Math.abs(mouth[14].y - mouth[18].y);
+        }
+        // 鼻尖横向/纵向位移
+        function getNoseMove(nose, lastNose) {
+            return {
+                x: nose.x - lastNose.x,
+                y: nose.y - lastNose.y
+            };
+        }
+        // --- 优化动作检测函数 ---
+        async function detectAction(action, landmarks, lastLandmarks) {
+            if (!landmarks) return false;
+            const nose = landmarks.getNose()[3]; // 鼻尖
+            const leftEye = landmarks.getLeftEye();
+            const rightEye = landmarks.getRightEye();
+            const mouth = landmarks.getMouth();
+            let movement = {x:0, y:0};
+            if (lastLandmarks) {
+                const lastNose = lastLandmarks.getNose()[3];
+                movement = getNoseMove(nose, lastNose);
+            }
+            // 计算EAR和mouthOpen
+            const leftEAR = getEAR(leftEye);
+            const rightEAR = getEAR(rightEye);
+            const mouthOpen = getMouthOpen(mouth);
+            // 判定
+            let detected = false;
+            switch (action) {
+                case '1': // 左摇头
+                    if (movement.x < -2) actionProgress[action]++;
+                    else actionProgress[action] = Math.max(0, actionProgress[action] - 1);
+                    detected = actionProgress[action] >= 2;
+                    break;
+                case '2': // 右摇头
+                    if (movement.x > 2) actionProgress[action]++;
+                    else actionProgress[action] = Math.max(0, actionProgress[action] - 1);
+                    detected = actionProgress[action] >= 2;
+                    break;
+                case '3': // 点头
+                    if (lastLandmarks) {
+                        nodTotalY += movement.y;
+                        if (Math.abs(nodTotalY) > 10) {
+                            actionProgress[action]++;
+                            nodTotalY = 0;
+                        } else {
+                            actionProgress[action] = Math.max(0, actionProgress[action] - 1);
+                        }
+                        detected = actionProgress[action] >= 1;
+                    }
+                    break;
+                case '4': // 嘴部动作
+                    if (mouthOpen > 15) actionProgress[action]++;
+                    else actionProgress[action] = Math.max(0, actionProgress[action] - 1);
+                    detected = actionProgress[action] >= 2;
+                    break;
+                case '5': // 眨眼
+                    if (leftEAR < 0.22 || rightEAR < 0.22) actionProgress[action]++;
+                    else actionProgress[action] = Math.max(0, actionProgress[action] - 1);
+                    detected = actionProgress[action] >= 1;
+                    detected = actionProgress[action] >= 3;
+                    break;
+            }
+            return detected;
+        }
+        // --- 替换动作检测主循环 ---
+        function initActionDetection() {
+            if (actionDetectionInterval) clearInterval(actionDetectionInterval);
+            actionProgress = {};
+            let lastLandmarks = null;
+            let lastNoseX = null; // 添加这行，用于跟踪鼻子的X坐标
+            actionDetectionInterval = setInterval(async () => {
+                if (!mediaRecorder || mediaRecorder.state !== 'recording') {
+                    stopActionDetection();
+                    return;
+                }
+                try {
+                    const video = document.getElementById('cameraPreview');
+                    const detections = await faceapi.detectSingleFace(
+                        video, 
+                        new faceapi.TinyFaceDetectorOptions()
+                    ).withFaceLandmarks(true);
+                    if (detections) {
+                        const currentAction = actionOrder[currentActionIndex];
+                        if (!actionProgress[currentAction]) actionProgress[currentAction] = 0;
+                        
+                        // 获取当前鼻子位置
+                        const nose = detections.landmarks.getNose()[3];
+                        let movement = {x: 0, y: 0};
+                        
+                        if (lastNoseX !== null) {
+                            movement.x = nose.x - lastNoseX;
+                        }
+                        if (lastLandmarks) {
+                            const lastNose = lastLandmarks.getNose()[3];
+                            movement.y = nose.y - lastNose.y;
+                        }
+                        
+                        lastNoseX = nose.x; // 更新lastNoseX
+                        const isCompleted = await detectAction(currentAction, detections.landmarks, lastLandmarks);
+                        lastLandmarks = detections.landmarks;
+                        
+                        if (isCompleted) {
+                            // 动作完成，进入下一个动作
+                            currentActionIndex++;
+                            actionProgress = {};
+                            lastLandmarks = null;
+                            lastNoseX = null; // 重置lastNoseX
+                            nodTotalY = 0; // 切换动作时重置累计
+                            if (currentActionIndex < actionOrder.length) {
+                                showActionTip(actionOrder[currentActionIndex]);
+                                recordingStatus.textContent = `已完成 ${currentActionIndex}/${actionOrder.length} 个动作`;
+                            } else {
+                                hideActionTip();
+                                stopActionDetection();
+                                recordingStatus.textContent = `已完成 ${actionOrder.length}/${actionOrder.length} 个动作，全部完成`;
+                                if (mediaRecorder && mediaRecorder.state === 'recording') {
+                                    mediaRecorder.stop(); // 直接停止录制，确保onstop被触发
+                                }
+                            }
+                        }
+                    }
+                } catch (error) {
+                    //console.error('动作检测出错:', error);
+                }
+            }, 120);
+        }
+        function stopActionDetection() {
+            if (actionDetectionInterval) {
+                clearInterval(actionDetectionInterval);
+                actionDetectionInterval = null;
+            }
+            actionProgress = {};
+        }
+
+        // 停止录制时隐藏提示和清理检测
         stopRecordingBtn.addEventListener('click', function() {
+            hideActionTip();
+            stopActionDetection();
+            if (actionTimer) clearInterval(actionTimer);
             if (mediaRecorder && mediaRecorder.state !== 'inactive') {
                 mediaRecorder.stop();
                 startRecordingBtn.style.display = 'inline-block';
                 stopRecordingBtn.style.display = 'none';
             }
-        });
-
-        // Blob转Base64
-        function blobToBase64(blob) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result);
-                reader.onerror = reject;
-                reader.readAsDataURL(blob);
-            });
-        }
-
-        // 录制时依次提示动作（每3秒自动切换）
-        startRecordingBtn.addEventListener('click', function() {
-            actionOrder = Array.from(selectedActions);
-            currentActionIndex = 0;
-            if (actionOrder.length > 0) {
-                showActionTip(actionOrder[currentActionIndex]);
-                actionTimer = setInterval(() => {
-                    currentActionIndex++;
-                    if (currentActionIndex < actionOrder.length) {
-                        showActionTip(actionOrder[currentActionIndex]);
-                    } else {
-                        hideActionTip();
-                        clearInterval(actionTimer);
-                    }
-                }, 3000);
-            }
-        });
-
-        // 停止录制时隐藏提示
-        stopRecordingBtn.addEventListener('click', function() {
-            hideActionTip();
-            if (actionTimer) clearInterval(actionTimer);
         });
 
         document.getElementById('closeRecordingBtn').addEventListener('click', function() {
@@ -1655,6 +1669,65 @@
                 }
             };
         });
+
+        // 渲染活体检测返回图片
+        function renderLivenessPicture(result, errorMsg) {
+            let previewWrapper = document.getElementById('livenessResultPreview');
+            if (!previewWrapper) {
+                previewWrapper = document.createElement('div');
+                previewWrapper.id = 'livenessResultPreview';
+                previewWrapper.style.margin = '20px auto';
+                previewWrapper.style.textAlign = 'center';
+                previewWrapper.innerHTML = '<img id="livenessResultImg" style="max-width:320px;max-height:240px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.2);margin-bottom:8px;display:none;margin-left:auto;margin-right:auto;" /><div id="livenessResultDesc" style="color:#ff9800;font-size:1rem;"></div><div id="livenessResultError" style="color:#f44336;font-size:1rem;margin-top:8px;"></div>';
+                // 插入到录制区域下方
+                recordingSection.parentNode.insertBefore(previewWrapper, recordingSection.nextSibling);
+            }
+            const img = document.getElementById('livenessResultImg');
+            const descDiv = document.getElementById('livenessResultDesc');
+            const errorDiv = document.getElementById('livenessResultError');
+            // 渲染图片
+            if (result && result.picture) {
+                console.log('接口返回的picture字段：', result.picture);
+                let picSrc = result.picture;
+                // 自动补全base64前缀，支持jpeg/png/webp
+                if (/^[A-Za-z0-9+/=]+$/.test(picSrc) && picSrc.length > 100) {
+                    picSrc = 'data:image/jpeg;base64,' + picSrc;
+                } else if (/^\/9j\//.test(picSrc)) { // jpeg magic number
+                    picSrc = 'data:image/jpeg;base64,' + picSrc;
+                } else if (/^iVBORw0KGgo/.test(picSrc)) { // png magic number
+                    picSrc = 'data:image/png;base64,' + picSrc;
+                } else if (/^UklGR/.test(picSrc)) { // webp magic number
+                    picSrc = 'data:image/webp;base64,' + picSrc;
+                }
+                img.src = picSrc;
+                console.log('最终图片src：', picSrc);
+                img.onerror = function() {
+                    this.style.display = 'none';
+                    descDiv.textContent = '图片加载失败';
+                };
+                img.onload = function() {
+                    this.style.display = 'block';
+                    descDiv.textContent = '检测抓拍图片';
+                };
+                img.style.display = 'block';
+                descDiv.textContent = '检测抓拍图片';
+            } else {
+                img.style.display = 'none';
+                descDiv.textContent = '';
+            }
+            // H5界面下展示错误（无论有无图片）
+            if (window.innerWidth <= 768 && errorMsg) {
+                errorDiv.textContent = errorMsg;
+                errorDiv.style.display = 'block';
+                previewWrapper.style.display = 'block';
+            } else {
+                errorDiv.textContent = '';
+                errorDiv.style.display = 'none';
+                // 如果没有图片和错误，隐藏整个区域
+                if (!(result && result.picture)) previewWrapper.style.display = 'none';
+                else previewWrapper.style.display = 'block';
+            }
+        }
     });
 </script>
 </body>
