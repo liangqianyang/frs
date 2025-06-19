@@ -874,8 +874,6 @@
 
                 hls.on(Hls.Events.MANIFEST_PARSED, function() {
                     updateStatus('视频加载完成，请点击播放按钮开始播放');
-                    // 移除自动播放
-                    // video.play();
                 });
 
                 hls.on(Hls.Events.ERROR, function(event, data) {
@@ -1169,6 +1167,11 @@
 
         // 开始录制
         startRecordingBtn.addEventListener('click', function() {
+            const resultImageWrapper = document.getElementById('resultImageWrapper');
+            if (resultImageWrapper) {
+                resultImageWrapper.style.display = 'none';
+            }
+
             if (selectedActions.size === 0) {
                 updateStatus('请先选择要执行的动作', true);
                 return;
@@ -1191,12 +1194,11 @@
                     recordingStatus.textContent = '处理中...';
                     recordingStatus.classList.remove('recording');
                     const blob = new Blob(recordedChunks, { type: 'video/webm' });
-                    const compressedBlob = await compressVideo(blob);
-                    const base64 = await blobToBase64(compressedBlob);
+                    const base64 = await blobToBase64(blob);
 
                     try {
                         updateStatus('正在验证...');
-                        const response = await fetch('/index/index/activeLiveness', {
+                        const response = await fetch('/activeLiveness', {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json'
@@ -1208,12 +1210,54 @@
                         });
 
                         const result = await response.json();
-                        if (result.code === 0) {
+                        // 新增：检测结果图片渲染区域和说明
+                        let resultImageWrapper = document.getElementById('resultImageWrapper');
+                        if (!resultImageWrapper) {
+                            resultImageWrapper = document.createElement('div');
+                            resultImageWrapper.id = 'resultImageWrapper';
+                            resultImageWrapper.style.textAlign = 'center';
+                            resultImageWrapper.style.marginTop = '16px';
+                            // 文字说明
+                            const desc = document.createElement('div');
+                            desc.id = 'resultImageDesc';
+                            desc.textContent = '下图为检测时抓拍的视频图片';
+                            desc.style.color = '#ff9800';
+                            desc.style.fontSize = '15px';
+                            desc.style.marginBottom = '8px';
+                            resultImageWrapper.appendChild(desc);
+                            // 图片
+                            const img = document.createElement('img');
+                            img.id = 'resultImage';
+                            img.style.display = 'block';
+                            img.style.maxWidth = '320px';
+                            img.style.margin = '0 auto';
+                            img.style.borderRadius = '10px';
+                            img.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
+                            resultImageWrapper.appendChild(img);
+                            recordingSection.appendChild(resultImageWrapper);
+                        }
+                        let resultImage = document.getElementById('resultImage');
+                        let resultImageDesc = document.getElementById('resultImageDesc');
+                        if (result.alive === true) {
                             updateStatus('动作活体检测成功');
                             recordingStatus.textContent = '验证成功';
+                            if (result.picture) {
+                                resultImage.src = result.picture.startsWith('data:') ? result.picture : 'data:image/jpeg;base64,' + result.picture;
+                                resultImageWrapper.style.display = 'block';
+                            } else {
+                                resultImageWrapper.style.display = 'none';
+                            }
                         } else {
-                            updateStatus('动作活体检测失败: ' + result.msg, true);
+                            let errorMsg = '动作活体检测失败';
+                            if (result.error) errorMsg += ': ' + result.error;
+                            updateStatus(errorMsg, true);
                             recordingStatus.textContent = '验证失败';
+                            if (result.picture) {
+                                resultImage.src = result.picture.startsWith('data:') ? result.picture : 'data:image/jpeg;base64,' + result.picture;
+                                resultImageWrapper.style.display = 'block';
+                            } else {
+                                resultImageWrapper.style.display = 'none';
+                            }
                         }
                     } catch (error) {
                         updateStatus('验证请求失败: ' + error.message, true);
@@ -1276,7 +1320,7 @@
         function blobToBase64(blob) {
             return new Promise((resolve, reject) => {
                 const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result.split(',')[1]);
+                reader.onloadend = () => resolve(reader.result);
                 reader.onerror = reject;
                 reader.readAsDataURL(blob);
             });

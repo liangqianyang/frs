@@ -13,5 +13,5 @@
 use think\facade\Route;
 
 Route::get('index', 'index/index');
-Route::get('activeLiveness', 'index/activeLiveness');
+Route::post('activeLiveness', 'index/activeLiveness');
 
