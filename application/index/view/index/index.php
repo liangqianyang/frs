@@ -1196,8 +1196,15 @@
         // 开始录制
         let recordStartTime = null;
         startRecordingBtn.addEventListener('click', function() {
-            const resultImageWrapper = document.getElementById('resultImageWrapper');
+            // 清除抓拍图片和结果提示
+            let resultImageWrapper = document.getElementById('resultImageWrapper');
             if (resultImageWrapper) {
+                let resultImage = document.getElementById('resultImage');
+                let resultImageDesc = document.getElementById('resultImageDesc');
+                let resultTip = document.getElementById('mobileLivenessResultTip');
+                if (resultImage) resultImage.style.display = 'none';
+                if (resultImageDesc) resultImageDesc.style.display = 'none';
+                if (resultTip) resultTip.style.display = 'none';
                 resultImageWrapper.style.display = 'none';
             }
             // 先重置
