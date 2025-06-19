@@ -1166,11 +1166,14 @@
         });
 
         // 开始录制
+        let recordStartTime = null;
         startRecordingBtn.addEventListener('click', function() {
             const resultImageWrapper = document.getElementById('resultImageWrapper');
             if (resultImageWrapper) {
                 resultImageWrapper.style.display = 'none';
             }
+            // 先重置
+            recordStartTime = null;
 
             if (selectedActions.size === 0) {
                 updateStatus('请先选择要执行的动作', true);
@@ -1194,7 +1197,61 @@
                     recordingStatus.textContent = '处理中...';
                     recordingStatus.classList.remove('recording');
                     const blob = new Blob(recordedChunks, { type: 'video/webm' });
-                    const base64 = await blobToBase64(blob);
+
+                    // 计算实际录制时长（秒），每次都用最新的 recordStartTime
+                    let actualDuration = 0;
+                    if (recordStartTime) {
+                        actualDuration = (Date.now() - recordStartTime) / 1000;
+                    }
+                    recordStartTime = null;
+
+                    // 检查视频时长（取实际录制时长和视频元数据的最大值，防止浏览器兼容性问题）
+                    const videoForCheck = document.createElement('video');
+                    videoForCheck.preload = 'metadata';
+                    videoForCheck.src = URL.createObjectURL(blob);
+                    await new Promise((resolve, reject) => {
+                        videoForCheck.onloadedmetadata = () => resolve();
+                        videoForCheck.onerror = reject;
+                    });
+                    let metaDuration = videoForCheck.duration;
+                    URL.revokeObjectURL(videoForCheck.src);
+                    // 修正：只用有效的 metaDuration，否则用 actualDuration
+                    if (!metaDuration || !isFinite(metaDuration) || isNaN(metaDuration)) {
+                        metaDuration = 0;
+                    }
+                    const duration = Math.max(metaDuration, actualDuration);
+                    if (duration < 1) {
+                        updateStatus('录制失败：视频时长不能小于1秒', true);
+                        recordingStatus.textContent = '视频过短';
+                        return;
+                    }
+                    if (duration > 15) {
+                        updateStatus('录制失败：视频时长不能超过15秒', true);
+                        recordingStatus.textContent = '视频过长';
+                        return;
+                    }
+
+                    // 压缩视频，目标2MB以内，最大8MB
+                    let finalBlob = blob;
+                    let base64 = await blobToBase64(finalBlob);
+                    let base64Size = Math.ceil((base64.length - 'data:video/webm;base64,'.length) * 3 / 4);
+                    if (base64Size > 2 * 1024 * 1024) {
+                        // 尝试压缩
+                        try {
+                            finalBlob = await compressVideo(blob);
+                            base64 = await blobToBase64(finalBlob);
+                            base64Size = Math.ceil((base64.length - 'data:video/webm;base64,'.length) * 3 / 4);
+                        } catch (e) {
+                            updateStatus('压缩视频失败: ' + e.message, true);
+                            recordingStatus.textContent = '压缩失败';
+                            return;
+                        }
+                    }
+                    if (base64Size > 8 * 1024 * 1024) {
+                        updateStatus('录制失败：视频文件过大（超过8MB），请缩短录制时长或降低分辨率', true);
+                        recordingStatus.textContent = '视频过大';
+                        return;
+                    }
 
                     try {
                         updateStatus('正在验证...');
@@ -1266,6 +1323,8 @@
                 };
 
                 mediaRecorder.start();
+                // 确保 start 之后再赋值，避免浏览器异步误差
+                recordStartTime = Date.now();
                 startRecordingBtn.style.display = 'none';
                 stopRecordingBtn.style.display = 'inline-block';
                 recordingStatus.textContent = '录制中...';
