@@ -297,6 +297,25 @@
             button {
                 width: 100%;
             }
+
+            .recording-preview {
+                aspect-ratio: 3/4 !important;
+                max-width: 100vw !important;
+                max-height: 80vh !important;
+                width: auto !important;
+                height: auto !important;
+                margin: 0 auto 20px !important;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: #000;
+            }
+            .recording-preview video {
+                width: 100% !important;
+                height: 100% !important;
+                object-fit: cover !important;
+                border-radius: 10px;
+            }
         }
 
         @media (max-width: 480px) {
