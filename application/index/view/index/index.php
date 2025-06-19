@@ -1342,6 +1342,28 @@
                             } else {
                                 resultImageWrapper.style.display = 'none';
                             }
+                            // 在渲染抓拍图片前，H5界面插入结果提示
+                            if (window.innerWidth <= 768) {
+                                let resultTip = document.getElementById('mobileLivenessResultTip');
+                                if (!resultTip) {
+                                    resultTip = document.createElement('div');
+                                    resultTip.id = 'mobileLivenessResultTip';
+                                    resultTip.style.fontWeight = 'bold';
+                                    resultTip.style.fontSize = '1.1rem';
+                                    resultTip.style.margin = '0 auto 8px';
+                                    resultTip.style.maxWidth = '90%';
+                                    resultTip.style.textAlign = 'center';
+                                    resultImageWrapper.insertBefore(resultTip, resultImageWrapper.firstChild);
+                                }
+                                resultTip.textContent = '动作活体检测成功';
+                                resultTip.style.color = '#4caf50';
+                                resultTip.style.background = 'rgba(76,175,80,0.08)';
+                                resultTip.style.display = 'block';
+                            } else {
+                                // PC端隐藏该tip
+                                let resultTip = document.getElementById('mobileLivenessResultTip');
+                                if (resultTip) resultTip.style.display = 'none';
+                            }
                         } else {
                             let errorMsg = '动作活体检测失败';
                             if (result.error) errorMsg += ': ' + result.error;
