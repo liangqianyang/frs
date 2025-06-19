@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>M3U8视频播放器</title>
+    <title>活体检测</title>
     {load href="/static/css/font-awesome.css" /}
     {load href="/static/js/hls.min.js" /}
     <style>
