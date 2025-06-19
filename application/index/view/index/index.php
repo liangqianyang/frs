@@ -1148,6 +1148,15 @@
                 }
                 updateStatus(errorMessage, true);
             }
+
+            // H5界面清除失败原因
+            if (window.innerWidth <= 768) {
+                const mobileErrorTip = document.getElementById('mobileErrorTip');
+                if (mobileErrorTip) {
+                    mobileErrorTip.textContent = '';
+                    mobileErrorTip.style.display = 'none';
+                }
+            }
         });
 
         // 监听窗口大小变化
@@ -1257,6 +1266,26 @@
                     if (base64Size > 8 * 1024 * 1024) {
                         updateStatus('录制失败：视频文件过大（超过8MB），请缩短录制时长或降低分辨率', true);
                         recordingStatus.textContent = '视频过大';
+                        // H5界面额外弹出失败原因
+                        if (window.innerWidth <= 768) {
+                            let mobileErrorTip = document.getElementById('mobileErrorTip');
+                            if (!mobileErrorTip) {
+                                mobileErrorTip = document.createElement('div');
+                                mobileErrorTip.id = 'mobileErrorTip';
+                                mobileErrorTip.style.color = '#ff4d4f';
+                                mobileErrorTip.style.background = 'rgba(255,255,255,0.95)';
+                                mobileErrorTip.style.borderRadius = '8px';
+                                mobileErrorTip.style.padding = '12px 16px';
+                                mobileErrorTip.style.margin = '16px auto 0';
+                                mobileErrorTip.style.fontWeight = 'bold';
+                                mobileErrorTip.style.fontSize = '1.1rem';
+                                mobileErrorTip.style.maxWidth = '90%';
+                                mobileErrorTip.style.textAlign = 'center';
+                                recordingSection.appendChild(mobileErrorTip);
+                            }
+                            mobileErrorTip.textContent = '视频文件过大，请缩短录制时长或降低分辨率后重试';
+                            mobileErrorTip.style.display = 'block';
+                        }
                         return;
                     }
 
