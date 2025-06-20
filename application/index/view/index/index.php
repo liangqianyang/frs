@@ -765,11 +765,11 @@
                     <h2>选择要执行的动作</h2>
                     <p class="text-gray-400 mb-4">请选择需要执行的动作（可多选）</p>
                     <div class="action-list">
-                        <div class="action-item" data-action="1">
+                        <div class="action-item" data-action="2">
                             <i class="fas fa-undo"></i>
                             <span>左摇头</span>
                         </div>
-                        <div class="action-item" data-action="2">
+                        <div class="action-item" data-action="1">
                             <i class="fas fa-redo"></i>
                             <span>右摇头</span>
                         </div>
@@ -997,8 +997,8 @@
 
         // 动作与图标、提示映射
         const actionTips = {
-            '1': { icon: 'fa-arrow-left', text: '请左摇头' },
-            '2': { icon: 'fa-arrow-right', text: '请右摇头' },
+            '2': { icon: 'fa-arrow-left', text: '请左摇头' },
+            '1': { icon: 'fa-arrow-right', text: '请右摇头' },
             '3': { icon: 'fa-arrow-down', text: '请点头' },
             '4': { icon: 'fa-comment', text: '请做嘴部动作' },
             '5': { icon: 'fa-eye', text: '请眨眼' }
@@ -1092,8 +1092,8 @@
         // 获取动作名称
         function getActionName(action) {
             const actionNames = {
-                '1': '左摇头',
-                '2': '右摇头',
+                '2': '左摇头',
+                '1': '右摇头',
                 '3': '点头',
                 '4': '嘴部动作',
                 '5': '眨眼'
