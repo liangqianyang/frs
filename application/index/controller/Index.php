@@ -77,6 +77,7 @@ class Index extends Controller
         $client = $this->createClient();
         $request = new DetectLiveByBase64Request();
         $body = new LiveDetectBase64Req();
+        $body->setNodThreshold(5);
         $body->setActions($actions);
         $body->setVideoBase64($video);
         $request->setBody($body);
